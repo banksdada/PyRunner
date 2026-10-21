@@ -29,6 +29,8 @@ class Run(models.Model):
         MANUAL = "manual", "Manual"
         SCHEDULED = "scheduled", "Scheduled"
         API = "api", "API"
+        WORKFLOW = "workflow", "Workflow"
+        RETRY = "retry", "Retry"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     script = models.ForeignKey(
@@ -125,6 +127,34 @@ class Run(models.Model):
         help_text="How this run was triggered",
     )
 
+    # Retry tracking. attempt 1 is the original run; each retry links back to
+    # the run it is retrying.
+    attempt = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="1 = first try, 2 = first retry, and so on",
+    )
+    retry_of = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="retries",
+        help_text="The failed run this run is retrying",
+    )
+    # Same for every attempt in a chain. Injected into the script as
+    # PYRUNNER_IDEMPOTENCY_KEY so it can avoid repeating work (e.g. an email
+    # that was already sent) when it is retried.
+    idempotency_key = models.CharField(max_length=64, blank=True, db_index=True)
+
+    # Set when this run is a step of a workflow.
+    workflow_step_run = models.ForeignKey(
+        "core.WorkflowStepRun",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="runs",
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -139,6 +169,26 @@ class Run(models.Model):
 
     def __str__(self):
         return f"Run {self.id} - {self.script.name} ({self.status})"
+
+    @property
+    def attempt_chain(self) -> list["Run"]:
+        """All attempts of this run's retry chain, oldest first."""
+        root = self
+        seen = {root.pk}
+        while root.retry_of_id and root.retry_of_id not in seen:
+            root = root.retry_of
+            seen.add(root.pk)
+        chain = [root]
+        while True:
+            nxt = chain[-1].retries.order_by("created_at").first()
+            if nxt is None or nxt in chain:
+                break
+            chain.append(nxt)
+        return chain
+
+    @property
+    def is_retry(self) -> bool:
+        return self.retry_of_id is not None
 
     @property
     def duration(self) -> float | None:

@@ -1,0 +1,5 @@
+{% comment %}Badge for workflow/step status. Expects `status` and `label`.{% endcomment %}
+<span class="inline-flex items-center gap-1.5 px-2 py-0.5 text-xs rounded-md {% if status == 'success' %}bg-ok/10 text-ok{% elif status == 'failed' or status == 'rejected' %}bg-fail/10 text-fail{% elif status == 'running' or status == 'waiting_approval' %}bg-warn/10 text-warn{% else %}bg-panel-hi text-muted{% endif %}">
+    <span class="w-1.5 h-1.5 rounded-full {% if status == 'success' %}bg-ok{% elif status == 'failed' or status == 'rejected' %}bg-fail{% elif status == 'running' %}bg-warn animate-pulse{% elif status == 'waiting_approval' %}bg-warn{% else %}bg-faint{% endif %}"></span>
+    {{ label }}
+</span>

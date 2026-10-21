@@ -90,6 +90,9 @@ class ScriptForm(forms.ModelForm):
             "is_enabled",
             "isolation_mode",
             "injection_mode",
+            "max_retries",
+            "retry_delay_seconds",
+            "retry_backoff",
             "notify_on",
             "notify_email",
             "notify_webhook_url",
@@ -121,6 +124,9 @@ class ScriptForm(forms.ModelForm):
             "is_enabled": forms.CheckboxInput(attrs={"class": CHECK_CLASS}),
             "isolation_mode": forms.Select(attrs={"class": INPUT_CLASS}),
             "injection_mode": forms.Select(attrs={"class": INPUT_CLASS}),
+            "max_retries": forms.NumberInput(attrs={"class": INPUT_CLASS, "min": 0, "max": 10}),
+            "retry_delay_seconds": forms.NumberInput(attrs={"class": INPUT_CLASS, "min": 1, "max": 86400}),
+            "retry_backoff": forms.Select(attrs={"class": INPUT_CLASS}),
             "notify_on": forms.Select(attrs={"class": INPUT_CLASS}),
             "notify_email": forms.EmailInput(
                 attrs={
@@ -146,6 +152,9 @@ class ScriptForm(forms.ModelForm):
             "is_enabled": "Enabled",
             "isolation_mode": "Execution Isolation",
             "injection_mode": "Secret injection",
+            "max_retries": "Automatic retries",
+            "retry_delay_seconds": "Wait before first retry (seconds)",
+            "retry_backoff": "Retry wait pattern",
             "notify_on": "Notify On",
             "notify_email": "Notification Email",
             "notify_webhook_url": "Webhook URL",
@@ -155,6 +164,7 @@ class ScriptForm(forms.ModelForm):
             "timeout_seconds": "Maximum execution time (1 second to 24 hours)",
             "isolation_mode": "Run sandboxed. Effective only when the workspace policy is 'optional' (a 'required' workspace always sandboxes).",
             "injection_mode": "All = every workspace secret (default). Selected = only the secrets you attach below.",
+            "max_retries": "0 = never retry. Alerts are sent only after the last attempt. Exit with code 78 to skip retries.",
             "notify_email": "Leave empty to use global default",
             "notify_webhook_url": "URL to POST notifications to when script completes",
         }
@@ -166,6 +176,23 @@ class ScriptForm(forms.ModelForm):
         # Optional: a form submitted without it (or legacy callers) defaults to
         # 'all' in clean_injection_mode, matching the model default.
         self.fields["injection_mode"].required = False
+        # Retry fields are optional in the form; fall back to model defaults.
+        for name in ("max_retries", "retry_delay_seconds", "retry_backoff"):
+            self.fields[name].required = False
+
+    def clean_max_retries(self):
+        v = self.cleaned_data.get("max_retries")
+        v = 0 if v is None else v
+        if v > 10:
+            raise forms.ValidationError("Maximum is 10 retries.")
+        return v
+
+    def clean_retry_delay_seconds(self):
+        v = self.cleaned_data.get("retry_delay_seconds")
+        return 60 if not v else min(v, 86400)
+
+    def clean_retry_backoff(self):
+        return self.cleaned_data.get("retry_backoff") or Script.RetryBackoff.EXPONENTIAL
 
     def clean_injection_mode(self):
         return self.cleaned_data.get("injection_mode") or Script.InjectionMode.ALL
@@ -2247,3 +2274,72 @@ class S3BackupScheduleForm(forms.Form):
         BackupScheduleService.sync_schedule()
 
         return instance
+
+
+# --- Workflows -------------------------------------------------------------
+from django.forms import inlineformset_factory  # noqa: E402
+
+from core.models import Workflow, WorkflowStep  # noqa: E402
+
+
+class WorkflowForm(forms.ModelForm):
+    class Meta:
+        model = Workflow
+        fields = ["name", "description", "is_enabled", "notify_email", "schedule_cron"]
+        widgets = {
+            "name": forms.TextInput(attrs={"class": INPUT_CLASS, "placeholder": "Nightly data pipeline"}),
+            "description": forms.Textarea(attrs={"class": INPUT_CLASS, "rows": 2}),
+            "is_enabled": forms.CheckboxInput(attrs={"class": CHECK_CLASS}),
+            "notify_email": forms.EmailInput(attrs={"class": INPUT_CLASS, "placeholder": "Optional"}),
+            "schedule_cron": forms.TextInput(attrs={"class": INPUT_CLASS + " font-mono", "placeholder": "30 8 * * 1-5"}),
+        }
+
+    def clean_schedule_cron(self):
+        value = " ".join(self.cleaned_data.get("schedule_cron", "").split())
+        if value:
+            from croniter import croniter
+
+            if not croniter.is_valid(value):
+                raise forms.ValidationError("Not a valid cron expression (5 fields, e.g. 30 8 * * 1-5).")
+        return value
+
+
+class WorkflowStepForm(forms.ModelForm):
+    class Meta:
+        model = WorkflowStep
+        fields = ["order", "name", "step_type", "script", "on_failure", "failure_goto", "approval_message"]
+        widgets = {
+            "order": forms.NumberInput(attrs={"class": INPUT_CLASS, "min": 1}),
+            "name": forms.TextInput(attrs={"class": INPUT_CLASS}),
+            "step_type": forms.Select(attrs={"class": INPUT_CLASS}),
+            "script": forms.Select(attrs={"class": INPUT_CLASS}),
+            "on_failure": forms.Select(attrs={"class": INPUT_CLASS}),
+            "failure_goto": forms.Select(attrs={"class": INPUT_CLASS}),
+            "approval_message": forms.Textarea(attrs={"class": INPUT_CLASS, "rows": 2}),
+        }
+
+    def __init__(self, *args, workspace=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        scripts = Script.objects.filter(archived_at__isnull=True).order_by("name")
+        if workspace is not None:
+            scripts = Script.objects.for_workspace(workspace).filter(archived_at__isnull=True).order_by("name")
+        self.fields["script"].queryset = scripts
+        self.fields["script"].required = False
+        wf = getattr(self.instance, "workflow", None) if self.instance.pk else None
+        self.fields["failure_goto"].queryset = (
+            WorkflowStep.objects.filter(workflow=wf) if wf else WorkflowStep.objects.none()
+        )
+        self.fields["failure_goto"].required = False
+
+    def clean(self):
+        data = super().clean()
+        if data.get("step_type") == WorkflowStep.StepType.SCRIPT and not data.get("script"):
+            self.add_error("script", "Pick a script for this step.")
+        if data.get("on_failure") == WorkflowStep.OnFailure.GOTO and not data.get("failure_goto"):
+            self.add_error("failure_goto", "Pick the step to jump to.")
+        return data
+
+
+WorkflowStepFormSet = inlineformset_factory(
+    Workflow, WorkflowStep, form=WorkflowStepForm, extra=2, can_delete=True
+)

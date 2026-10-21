@@ -276,6 +276,57 @@
                 </div>
             </div>
 
+
+            <!-- ============ HEALTH: TREND + PER-SCRIPT + WORKFLOWS ============ -->
+            <div class="grid lg:grid-cols-3 gap-5">
+                <section class="lg:col-span-2 rounded-2xl border border-line bg-panel p-6 space-y-6">
+                    <div>
+                        <h3 class="eyebrow text-faint mb-3">Runs per day <span class="normal-case text-faint">· last 14 days</span></h3>
+                        <div class="flex items-end gap-1.5 h-28">
+                            {% for d in runs_per_day %}
+                            <div class="flex-1 h-full flex flex-col justify-end" title="{{ d.day|date:'M d' }}: {{ d.ok }} ok, {{ d.bad }} failed">
+                                <div class="bg-fail rounded-t-sm" style="height: {{ d.bad_pct }}%"></div>
+                                <div class="bg-ok {% if not d.bad %}rounded-t-sm{% endif %}" style="height: {{ d.ok_pct }}%"></div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        <div class="flex justify-between text-[11px] text-faint mt-1.5"><span>{{ runs_per_day.0.day|date:"M d" }}</span><span><span class="text-ok">&#9632;</span> ok <span class="text-fail">&#9632;</span> failed</span><span>today</span></div>
+                    </div>
+                    <div>
+                        <h3 class="eyebrow text-faint mb-3">Script health <span class="normal-case text-faint">· last 30 days, worst first</span></h3>
+                        {% if script_health %}
+                        <div class="overflow-x-auto">
+                        <table class="w-full min-w-[480px] text-sm">
+                            <thead><tr class="text-left text-faint text-xs"><th class="py-2 font-normal">Script</th><th class="py-2 font-normal">Runs</th><th class="py-2 font-normal">Success</th><th class="py-2 font-normal">Avg time</th><th class="py-2 font-normal">Last</th></tr></thead>
+                            <tbody class="divide-y divide-line-soft">
+                            {% for h in script_health %}
+                                <tr>
+                                    <td class="py-2"><a href="{% url 'cpanel:script_detail' pk=h.script_id %}" class="text-info hover:underline">{{ h.name }}</a></td>
+                                    <td class="py-2 text-muted tnum">{{ h.total }}</td>
+                                    <td class="py-2 tnum {% if h.success_rate < 80 %}text-fail{% elif h.success_rate < 100 %}text-warn{% else %}text-ok{% endif %}">{{ h.success_rate }}%</td>
+                                    <td class="py-2 text-muted tnum">{% if h.avg_seconds is not None %}{{ h.avg_seconds }}s{% else %}-{% endif %}</td>
+                                    <td class="py-2 text-xs text-muted">{{ h.last_status }}</td>
+                                </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                        </div>
+                        {% else %}<p class="text-sm text-muted">No finished runs in the last 30 days.</p>{% endif %}
+                    </div>
+                </section>
+                <section class="rounded-2xl border border-line bg-panel p-6 space-y-4">
+                    <h3 class="eyebrow text-faint">Workflows</h3>
+                    <div class="flex gap-6 text-sm">
+                        <div><div class="text-2xl font-semibold tnum">{{ workflow_summary.running }}</div><div class="text-xs text-faint">running</div></div>
+                        <div><div class="text-2xl font-semibold tnum {% if workflow_summary.failed_today %}text-fail{% endif %}">{{ workflow_summary.failed_today }}</div><div class="text-xs text-faint">failed today</div></div>
+                        <div><div class="text-2xl font-semibold tnum {% if workflow_summary.waiting %}text-warn{% endif %}">{{ workflow_summary.waiting|length }}</div><div class="text-xs text-faint">need approval</div></div>
+                    </div>
+                    {% for wr in workflow_summary.waiting %}
+                    <a href="{% url 'cpanel:workflow_run_detail' pk=wr.pk %}" class="block rounded-lg border border-warn/30 bg-warn/10 px-3 py-2 text-sm text-warn hover:bg-warn/20 transition-colors">Approve: {{ wr.workflow.name }}</a>
+                    {% endfor %}
+                    <a href="{% url 'cpanel:workflow_list' %}" class="text-xs text-info hover:underline">All workflows</a>
+                </section>
+            </div>
         </div>
     </div>
 </div>

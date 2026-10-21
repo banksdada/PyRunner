@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}{{ wr.workflow.name }} run - PyRunner{% endblock %}
+{% block extra_head %}{% if not wr.is_finished %}<meta http-equiv="refresh" content="5">{% endif %}{% endblock %}
+{% block content %}
+<div class="flex">
+    {% include "cpanel/_sidebar.html" %}
+    <div class="flex-1 min-w-0">
+        <div class="px-5 lg:px-8 py-7 max-w-[1100px] mx-auto space-y-5">
+            <div>
+                <nav class="flex items-center gap-1.5 eyebrow text-faint mb-3">
+                    <a href="{% url 'cpanel:workflow_list' %}" class="hover:text-text transition-colors">Workflows</a><span>/</span>
+                    <a href="{% url 'cpanel:workflow_detail' pk=wr.workflow.pk %}" class="hover:text-text transition-colors">{{ wr.workflow.name }}</a><span>/</span><span class="text-muted">Run</span>
+                </nav>
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex items-center gap-3">
+                        <h1 class="text-[22px] font-semibold tracking-tight">{{ wr.workflow.name }}</h1>
+                        {% include "cpanel/workflows/_status.html" with status=wr.status label=wr.get_status_display %}
+                    </div>
+                    {% if not wr.is_finished %}
+                    <form method="post" action="{% url 'cpanel:workflow_run_cancel' pk=wr.pk %}" onsubmit="return confirm('Cancel this workflow run?');">{% csrf_token %}<button class="text-[13px] px-3.5 py-2 rounded-lg border border-fail/30 bg-fail/10 text-fail hover:bg-fail/20 transition-colors">Cancel run</button></form>
+                    {% endif %}
+                </div>
+                <p class="text-xs text-faint mt-2">Started {{ wr.started_at|date:"M d, Y H:i:s" }} · {{ wr.duration_display }} · {{ wr.trigger_type }}</p>
+            </div>
+
+            <section class="rounded-2xl border border-line bg-panel p-5">
+                <h3 class="eyebrow text-faint mb-4">Timeline</h3>
+                <ol class="space-y-5">
+                {% for item in step_runs %}
+                    {% with sr=item.sr %}
+                    <li>
+                        <div class="flex flex-wrap items-center gap-3">
+                            <span class="w-6 h-6 rounded-full bg-panel-hi grid place-items-center text-xs text-muted">{{ forloop.counter }}</span>
+                            <span class="text-sm font-medium">{{ sr.step_name }}</span>
+                            {% include "cpanel/workflows/_status.html" with status=sr.status label=sr.get_status_display %}
+                        </div>
+                        {% for r in item.runs %}
+                        <div class="ml-9 mt-2 text-xs flex flex-wrap items-center gap-3">
+                            <span class="text-faint">Attempt {{ r.attempt }}</span>
+                            <a href="{% url 'cpanel:run_detail' pk=r.pk %}">{% include "cpanel/runs/_status_badge.html" with run=r %}</a>
+                            <span class="text-faint">{{ r.duration_display }}</span>
+                        </div>
+                        {% endfor %}
+                        {% if sr.status == 'waiting_approval' %}
+                        <form method="post" action="{% url 'cpanel:workflow_step_decide' pk=sr.pk %}" class="ml-9 mt-3 space-y-2">
+                            {% csrf_token %}
+                            {% if sr.step.approval_message %}<p class="text-sm text-muted whitespace-pre-line">{{ sr.step.approval_message }}</p>{% endif %}
+                            <input name="note" placeholder="Note (optional)" class="w-full max-w-md rounded-lg border border-line bg-ink px-3 py-2 text-sm">
+                            <div class="flex gap-2">
+                                <button name="decision" value="approve" class="text-[13px] font-medium px-3.5 py-2 rounded-lg bg-ok text-ink hover:opacity-90 transition">Approve</button>
+                                <button name="decision" value="reject" class="text-[13px] px-3.5 py-2 rounded-lg border border-fail/30 bg-fail/10 text-fail hover:bg-fail/20 transition-colors">Reject</button>
+                            </div>
+                        </form>
+                        {% elif sr.decided_by %}
+                        <p class="ml-9 mt-2 text-xs text-faint">Decided by {{ sr.decided_by.email }}{% if sr.note %}: {{ sr.note }}{% endif %}</p>
+                        {% endif %}
+                    </li>
+                    {% endwith %}
+                {% empty %}<li class="text-sm text-faint">No steps have started.</li>{% endfor %}
+                </ol>
+            </section>
+        </div>
+    </div>
+</div>
+{% endblock %}

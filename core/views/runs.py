@@ -66,4 +66,9 @@ def run_detail_view(request: HttpRequest, pk) -> HttpResponse:
         workspace=request.workspace,
     )
 
-    return render(request, "cpanel/runs/detail.html", {"run": run})
+    workflow_run = run.workflow_step_run.workflow_run if run.workflow_step_run_id else None
+    return render(
+        request,
+        "cpanel/runs/detail.html",
+        {"run": run, "attempts": run.attempt_chain, "workflow_run": workflow_run},
+    )

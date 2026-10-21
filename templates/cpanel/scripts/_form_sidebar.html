@@ -233,6 +233,25 @@
     </section>
     {% endif %}
 
+    <!-- Automatic retries -->
+    <section class="rounded-2xl border border-line bg-panel p-5 space-y-4">
+        <h3 class="text-sm font-semibold">Automatic retries</h3>
+        <div>
+            <label for="id_max_retries" class="block text-[13px] font-medium text-text mb-1.5">{{ form.max_retries.label }}</label>
+            {{ form.max_retries }}
+            <p class="mt-1.5 text-xs text-faint">{{ form.max_retries.help_text }}</p>
+            {% if form.max_retries.errors %}<p class="mt-1.5 text-xs text-fail">{{ form.max_retries.errors.0 }}</p>{% endif %}
+        </div>
+        <div>
+            <label for="id_retry_delay_seconds" class="block text-[13px] font-medium text-text mb-1.5">{{ form.retry_delay_seconds.label }}</label>
+            {{ form.retry_delay_seconds }}
+        </div>
+        <div>
+            <label for="id_retry_backoff" class="block text-[13px] font-medium text-text mb-1.5">{{ form.retry_backoff.label }}</label>
+            {{ form.retry_backoff }}
+        </div>
+    </section>
+
     <!-- Notifications (collapsible) -->
     <section class="rounded-2xl border border-line bg-panel overflow-hidden">
         <button type="button" onclick="toggleSection('notifications')" class="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-panel-hi/50 transition-colors">

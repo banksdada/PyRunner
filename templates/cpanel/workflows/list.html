@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Workflows - PyRunner{% endblock %}
+{% block content %}
+<div class="flex">
+    {% include "cpanel/_sidebar.html" %}
+    <div class="flex-1 min-w-0">
+        <div class="px-5 lg:px-8 py-7 max-w-[1440px] mx-auto space-y-5">
+            <div class="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                    <h1 class="text-[22px] font-semibold tracking-tight">Workflows</h1>
+                    <p class="text-sm text-muted mt-1">Chain scripts together: run B after A succeeds, with optional approval steps.</p>
+                </div>
+                <a href="{% url 'cpanel:workflow_create' %}" class="inline-flex items-center gap-2 text-[13px] font-medium px-3.5 py-2 rounded-lg bg-ok text-ink hover:opacity-90 transition">New workflow</a>
+            </div>
+            {% if rows %}
+            <section class="rounded-2xl border border-line bg-panel overflow-hidden">
+                <div class="overflow-x-auto">
+                <table class="w-full min-w-[640px]">
+                    <thead><tr class="border-b border-line-soft text-left">
+                        <th class="px-6 py-3 eyebrow text-faint font-normal">Workflow</th>
+                        <th class="px-6 py-3 eyebrow text-faint font-normal">Steps</th>
+                        <th class="px-6 py-3 eyebrow text-faint font-normal">Schedule</th>
+                        <th class="px-6 py-3 eyebrow text-faint font-normal">Last run</th>
+                    </tr></thead>
+                    <tbody class="divide-y divide-line-soft">
+                    {% for row in rows %}
+                        <tr class="hover:bg-panel-hi/50 transition-colors">
+                            <td class="px-6 py-3.5"><a href="{% url 'cpanel:workflow_detail' pk=row.workflow.pk %}" class="text-sm font-medium text-info hover:underline">{{ row.workflow.name }}</a>{% if not row.workflow.is_enabled %} <span class="text-xs text-faint">(disabled)</span>{% endif %}</td>
+                            <td class="px-6 py-3.5 text-sm text-muted">{{ row.step_count }}</td>
+                            <td class="px-6 py-3.5 text-xs font-mono text-muted">{% if row.workflow.schedule_cron %}{{ row.workflow.schedule_cron }}{% else %}manual{% endif %}</td>
+                            <td class="px-6 py-3.5">{% if row.last_run %}<a href="{% url 'cpanel:workflow_run_detail' pk=row.last_run.pk %}">{% include "cpanel/workflows/_status.html" with status=row.last_run.status label=row.last_run.get_status_display %}</a> <span class="text-xs text-faint ml-2">{{ row.last_run.created_at|timesince }} ago</span>{% else %}<span class="text-xs text-faint">never</span>{% endif %}</td>
+                        </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+                </div>
+            </section>
+            {% else %}
+            <section class="rounded-2xl border border-line bg-panel px-6 py-16 text-center">
+                <h3 class="text-base font-semibold mb-1">No workflows yet</h3>
+                <p class="text-sm text-muted mb-6">A workflow runs your scripts in order, and can wait for your approval in between.</p>
+                <a href="{% url 'cpanel:workflow_create' %}" class="inline-flex items-center gap-2 text-[13px] font-medium px-3.5 py-2 rounded-lg bg-ok text-ink hover:opacity-90 transition">Create workflow</a>
+            </section>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

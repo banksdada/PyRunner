@@ -366,3 +366,32 @@ class NotificationService:
 
         logger.info(f"Test email sent to {recipient_email}")
         return True
+
+
+def send_plain_alert(subject: str, body: str, recipient: str = "") -> bool:
+    """
+    Send a short plain-text alert using the configured email backend.
+
+    Used for workflow alerts (failed / waiting for approval). Never raises:
+    returns True if sent, False otherwise.
+    """
+    from core.models import GlobalSettings
+
+    try:
+        gs = GlobalSettings.get_settings()
+        backend = NotificationService._get_email_backend(gs)
+        recipient = recipient or gs.default_notification_email
+        from_email = (
+            gs.smtp_from_email
+            if gs.email_backend == GlobalSettings.EmailBackend.SMTP
+            else gs.resend_from_email
+        )
+        if not (backend and recipient and from_email):
+            return False
+        EmailMultiAlternatives(
+            subject=subject, body=body, from_email=from_email, to=[recipient], connection=backend
+        ).send()
+        return True
+    except Exception as e:  # alerts must never break a run
+        logger.error(f"Failed to send alert '{subject}': {e}")
+        return False

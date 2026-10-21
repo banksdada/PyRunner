@@ -54,7 +54,14 @@ def dashboard_view(request):
     system_health = DashboardService.get_system_health()
     system_resources = SystemInfoService.get_system_resources()
 
+    script_health = DashboardService.get_script_health(workspace=ws)
+    runs_per_day = DashboardService.get_runs_per_day(workspace=ws)
+    workflow_summary = DashboardService.get_workflow_summary(workspace=ws)
+
     context = {
+        "script_health": script_health,
+        "runs_per_day": runs_per_day,
+        "workflow_summary": workflow_summary,
         # Statistics cards
         "scripts_count": stats["total_scripts"],
         "active_scripts_count": stats["active_scripts"],

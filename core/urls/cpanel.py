@@ -21,6 +21,16 @@ from core.views.scripts import (
     scan_env_refs_view,
 )
 from core.views.runs import run_list_view, run_detail_view
+from core.views.workflows import (
+    workflow_list_view,
+    workflow_form_view,
+    workflow_detail_view,
+    workflow_start_view,
+    workflow_delete_view,
+    workflow_run_detail_view,
+    workflow_step_decide_view,
+    workflow_run_cancel_view,
+)
 from core.views.changelog import changelog_view
 from core.views.environments import (
     environment_list_view,
@@ -173,6 +183,17 @@ urlpatterns = [
     # Runs
     path("runs/", run_list_view, name="run_list"),
     path("runs/<uuid:pk>/", run_detail_view, name="run_detail"),
+
+    # Workflows
+    path("workflows/", workflow_list_view, name="workflow_list"),
+    path("workflows/create/", workflow_form_view, name="workflow_create"),
+    path("workflows/<uuid:pk>/", workflow_detail_view, name="workflow_detail"),
+    path("workflows/<uuid:pk>/edit/", workflow_form_view, name="workflow_edit"),
+    path("workflows/<uuid:pk>/start/", workflow_start_view, name="workflow_start"),
+    path("workflows/<uuid:pk>/delete/", workflow_delete_view, name="workflow_delete"),
+    path("workflow-runs/<uuid:pk>/", workflow_run_detail_view, name="workflow_run_detail"),
+    path("workflow-runs/<uuid:pk>/cancel/", workflow_run_cancel_view, name="workflow_run_cancel"),
+    path("workflow-steps/<uuid:pk>/decide/", workflow_step_decide_view, name="workflow_step_decide"),
 
     # Tasks
     path("tasks/", tasks_view, name="tasks"),

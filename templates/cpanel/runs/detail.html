@@ -30,8 +30,13 @@
                         </div>
                         <p class="text-sm text-muted mt-1.5">Run ID <span class="font-mono text-faint">{{ run.pk }}</span></p>
                     </div>
-                    <a href="{% url 'cpanel:script_detail' pk=run.script.pk %}"
-                       class="flex-shrink-0 text-[13px] px-3.5 py-2 rounded-lg border border-line text-muted hover:text-text hover:border-faint transition-colors">View script</a>
+                    <div class="flex-shrink-0 flex items-center gap-2">
+                        {% if run.is_finished and run.script.can_run %}
+                        <form method="post" action="{% url 'cpanel:script_run' pk=run.script.pk %}">{% csrf_token %}<button class="text-[13px] font-medium px-3.5 py-2 rounded-lg bg-ok text-ink hover:opacity-90 transition">Re-run</button></form>
+                        {% endif %}
+                        <a href="{% url 'cpanel:script_detail' pk=run.script.pk %}"
+                           class="text-[13px] px-3.5 py-2 rounded-lg border border-line text-muted hover:text-text hover:border-faint transition-colors">View script</a>
+                    </div>
                 </div>
             </div>
 
@@ -110,6 +115,26 @@
 
                 <!-- Right: metadata -->
                 <div class="space-y-5">
+                    {% if attempts|length > 1 %}
+                    <section class="rounded-2xl border border-line bg-panel p-5">
+                        <h3 class="eyebrow text-faint mb-4">Attempts</h3>
+                        <ol class="space-y-2.5 text-sm">
+                            {% for a in attempts %}
+                            <li class="flex items-center justify-between gap-3">
+                                <a href="{% url 'cpanel:run_detail' pk=a.pk %}" class="{% if a.pk == run.pk %}font-medium text-text{% else %}text-info hover:underline{% endif %}">Attempt {{ a.attempt }}</a>
+                                <span class="flex items-center gap-2">{% include "cpanel/runs/_status_badge.html" with run=a %}<span class="text-xs text-faint font-mono">{{ a.created_at|date:"H:i:s" }}</span></span>
+                            </li>
+                            {% endfor %}
+                        </ol>
+                    </section>
+                    {% endif %}
+                    {% if workflow_run %}
+                    <section class="rounded-2xl border border-line bg-panel p-5 text-sm">
+                        <h3 class="eyebrow text-faint mb-3">Workflow</h3>
+                        <a href="{% url 'cpanel:workflow_run_detail' pk=workflow_run.pk %}" class="text-info hover:underline">{{ workflow_run.workflow.name }}</a>
+                        <p class="text-xs text-faint mt-1">Step: {{ run.workflow_step_run.step_name }}</p>
+                    </section>
+                    {% endif %}
                     <!-- Run info -->
                     <section class="rounded-2xl border border-line bg-panel p-5">
                         <h3 class="eyebrow text-faint mb-4">Run info</h3>

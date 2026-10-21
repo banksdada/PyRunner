@@ -9,6 +9,7 @@ from .user import User, MagicToken, UserInvite, PasswordResetToken
 from .workspace import Workspace, WorkspaceMembership
 from .environment import Environment
 from .script import Script
+from .workflow import Workflow, WorkflowStep, WorkflowRun, WorkflowStepRun
 from .run import Run
 from .schedule import ScriptSchedule, ScheduleHistory
 from .settings import GlobalSettings
@@ -30,6 +31,10 @@ __all__ = [
     "Environment",
     "Script",
     "Run",
+    "Workflow",
+    "WorkflowStep",
+    "WorkflowRun",
+    "WorkflowStepRun",
     "ScriptSchedule",
     "ScheduleHistory",
     "GlobalSettings",

@@ -11,7 +11,7 @@ from uuid import UUID
 from django.utils import timezone
 from django_q.tasks import async_task
 
-from core.models import Run, Script, ScriptSchedule, GlobalSettings, PackageOperation
+from core.models import Run, Script, ScriptSchedule, GlobalSettings, PackageOperation, Workflow
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +54,34 @@ def execute_run_task(run_id: str, webhook_data: dict | None = None) -> dict:
 
     execute_run(run, webhook_data=webhook_data)
     run.refresh_from_db()
+
+    # Automatic retry: if this attempt failed and attempts remain, schedule the
+    # next one and skip alerts/workflow progress until the final attempt.
+    retry_run = None
+    try:
+        from core.services.retry_service import RetryService
+
+        retry_run = RetryService.schedule_retry(run, webhook_data)
+    except Exception:
+        logger.exception(f"Failed to schedule retry for run {run_id}")
+
+    if retry_run is not None:
+        return {
+            "success": False,
+            "run_id": run_id,
+            "status": run.status,
+            "exit_code": run.exit_code,
+            "retry_run_id": str(retry_run.id),
+        }
+
+    # Final attempt: move the workflow on, if this run belongs to one.
+    if run.workflow_step_run_id:
+        try:
+            from core.services.workflow_service import WorkflowService
+
+            WorkflowService.on_run_finished(run)
+        except Exception:
+            logger.exception(f"Workflow progress failed after run {run_id}")
 
     # Send notifications after run completion
     try:
@@ -167,6 +195,8 @@ def execute_scheduled_run(script_id: str) -> dict:
         trigger_type=Run.TriggerType.SCHEDULED,
         code_snapshot=script.code,
     )
+    run.idempotency_key = run.id.hex
+    run.save(update_fields=["idempotency_key"])
 
     # Update schedule tracking
     schedule.last_scheduled_run = timezone.now()
@@ -447,3 +477,18 @@ def scheduled_backup_task() -> dict:
 
         logger.exception("Scheduled backup task failed")
         return {"success": False, "error": str(e)}
+
+
+def execute_scheduled_workflow(workflow_id: str) -> dict:
+    """Start a workflow on its cron schedule. Called by django-q2 scheduler."""
+    from core.services.workflow_service import WorkflowService
+
+    if GlobalSettings.get_settings().schedules_paused:
+        return {"success": False, "error": "Schedules globally paused"}
+    try:
+        workflow = Workflow.objects.get(id=UUID(workflow_id))
+        wr = WorkflowService.start(workflow, trigger_type="scheduled")
+    except Exception as e:
+        logger.exception(f"Scheduled workflow {workflow_id} failed to start")
+        return {"success": False, "error": str(e)}
+    return {"success": True, "workflow_run_id": str(wr.id)}

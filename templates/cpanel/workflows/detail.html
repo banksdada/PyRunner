@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{{ workflow.name }} - PyRunner{% endblock %}
+{% block content %}
+<div class="flex">
+    {% include "cpanel/_sidebar.html" %}
+    <div class="flex-1 min-w-0">
+        <div class="px-5 lg:px-8 py-7 max-w-[1100px] mx-auto space-y-5">
+            <div>
+                <nav class="flex items-center gap-1.5 eyebrow text-faint mb-3">
+                    <a href="{% url 'cpanel:workflow_list' %}" class="hover:text-text transition-colors">Workflows</a><span>/</span><span class="text-muted">Details</span>
+                </nav>
+                <div class="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                        <h1 class="text-[22px] font-semibold tracking-tight">{{ workflow.name }}</h1>
+                        {% if workflow.description %}<p class="text-sm text-muted mt-1">{{ workflow.description }}</p>{% endif %}
+                        <p class="text-xs text-faint mt-2">Schedule: <span class="font-mono">{% if workflow.schedule_cron %}{{ workflow.schedule_cron }}{% else %}manual only{% endif %}</span>{% if not workflow.is_enabled %} · disabled{% endif %}</p>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <form method="post" action="{% url 'cpanel:workflow_start' pk=workflow.pk %}">{% csrf_token %}<button class="text-[13px] font-medium px-3.5 py-2 rounded-lg bg-ok text-ink hover:opacity-90 transition">Run now</button></form>
+                        <a href="{% url 'cpanel:workflow_edit' pk=workflow.pk %}" class="text-[13px] px-3.5 py-2 rounded-lg border border-line text-muted hover:text-text hover:border-faint transition-colors">Edit</a>
+                        <form method="post" action="{% url 'cpanel:workflow_delete' pk=workflow.pk %}" onsubmit="return confirm('Delete this workflow and its history?');">{% csrf_token %}<button class="text-[13px] px-3.5 py-2 rounded-lg border border-fail/30 bg-fail/10 text-fail hover:bg-fail/20 transition-colors">Delete</button></form>
+                    </div>
+                </div>
+            </div>
+
+            <section class="rounded-2xl border border-line bg-panel p-5">
+                <h3 class="eyebrow text-faint mb-4">Steps</h3>
+                <ol class="space-y-2">
+                {% for step in steps %}
+                    <li class="flex flex-wrap items-center gap-3 text-sm">
+                        <span class="w-6 h-6 rounded-full bg-panel-hi grid place-items-center text-xs text-muted">{{ forloop.counter }}</span>
+                        <span class="font-medium">{{ step.name }}</span>
+                        <span class="text-xs text-faint">{% if step.step_type == 'approval' %}waits for approval{% else %}runs <a class="text-info hover:underline" href="{% url 'cpanel:script_detail' pk=step.script.pk %}">{{ step.script.name }}</a>{% endif %}</span>
+                        <span class="text-xs text-faint">· on failure: {{ step.get_on_failure_display|lower }}{% if step.failure_goto %} ({{ step.failure_goto.name }}){% endif %}</span>
+                    </li>
+                {% empty %}<li class="text-sm text-faint">No steps yet. Click Edit to add some.</li>{% endfor %}
+                </ol>
+            </section>
+
+            <section class="rounded-2xl border border-line bg-panel overflow-hidden">
+                <h3 class="eyebrow text-faint px-5 pt-5 pb-3">Recent runs</h3>
+                <table class="w-full">
+                    <tbody class="divide-y divide-line-soft">
+                    {% for wr in runs %}
+                        <tr class="hover:bg-panel-hi/50">
+                            <td class="px-5 py-3"><a href="{% url 'cpanel:workflow_run_detail' pk=wr.pk %}">{% include "cpanel/workflows/_status.html" with status=wr.status label=wr.get_status_display %}</a></td>
+                            <td class="px-5 py-3 text-xs text-muted">{{ wr.started_at|date:"M d, H:i" }}</td>
+                            <td class="px-5 py-3 text-xs text-muted">{{ wr.duration_display }}</td>
+                            <td class="px-5 py-3 text-xs text-faint">{{ wr.trigger_type }}</td>
+                        </tr>
+                    {% empty %}<tr><td class="px-5 py-6 text-sm text-faint">Not run yet.</td></tr>{% endfor %}
+                    </tbody>
+                </table>
+            </section>
+        </div>
+    </div>
+</div>
+{% endblock %}

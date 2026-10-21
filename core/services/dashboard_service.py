@@ -148,3 +148,91 @@ class DashboardService:
             "schedules_paused": global_settings.schedules_paused,
             "queue_size": worker_info["queued_tasks"],
         }
+
+    @classmethod
+    def get_script_health(cls, workspace=None, days: int = 30, limit: int = 15) -> list[dict]:
+        """
+        Per-script health over the last ``days`` days: runs, success rate, average
+        duration, last status. Worst scripts (lowest success rate) come first.
+        Retry attempts count as runs, so a script that only passes on retry shows
+        a rate below 100%.
+        """
+        from django.db.models import Avg, Count, ExpressionWrapper, F, DurationField, Q
+
+        from core.models import Run
+
+        since = timezone.now() - timedelta(days=days)
+        runs = Run.objects.filter(created_at__gte=since, status__in=[
+            Run.Status.SUCCESS, Run.Status.FAILED, Run.Status.TIMEOUT])
+        if workspace is not None:
+            runs = runs.for_workspace(workspace)
+        rows = (
+            runs.values("script_id", "script__name")
+            .annotate(
+                total=Count("id"),
+                ok=Count("id", filter=Q(status=Run.Status.SUCCESS)),
+                avg_duration=Avg(ExpressionWrapper(F("ended_at") - F("started_at"), output_field=DurationField())),
+            )
+        )
+        result = []
+        for r in rows:
+            last = (
+                Run.objects.filter(script_id=r["script_id"]).order_by("-created_at").values_list("status", flat=True).first()
+            )
+            avg = r["avg_duration"]
+            result.append({
+                "script_id": r["script_id"],
+                "name": r["script__name"],
+                "total": r["total"],
+                "failed": r["total"] - r["ok"],
+                "success_rate": round(r["ok"] / r["total"] * 100, 1),
+                "avg_seconds": round(avg.total_seconds(), 1) if avg else None,
+                "last_status": last,
+            })
+        result.sort(key=lambda x: (x["success_rate"], -x["total"]))
+        return result[:limit]
+
+    @classmethod
+    def get_runs_per_day(cls, workspace=None, days: int = 14) -> list[dict]:
+        """Successful vs failed runs per day (oldest first) for the trend chart."""
+        from django.db.models import Count, Q
+        from django.db.models.functions import TruncDate
+
+        from core.models import Run
+
+        today = timezone.localdate()
+        start = today - timedelta(days=days - 1)
+        runs = Run.objects.filter(created_at__date__gte=start)
+        if workspace is not None:
+            runs = runs.for_workspace(workspace)
+        counts = {
+            row["day"]: row
+            for row in runs.annotate(day=TruncDate("created_at")).values("day").annotate(
+                ok=Count("id", filter=Q(status=Run.Status.SUCCESS)),
+                bad=Count("id", filter=Q(status__in=[Run.Status.FAILED, Run.Status.TIMEOUT])),
+            )
+        }
+        series = []
+        for i in range(days):
+            d = start + timedelta(days=i)
+            row = counts.get(d, {"ok": 0, "bad": 0})
+            series.append({"day": d, "ok": row["ok"], "bad": row["bad"]})
+        peak = max([x["ok"] + x["bad"] for x in series] + [1])
+        for x in series:
+            x["ok_pct"] = round(x["ok"] / peak * 100)
+            x["bad_pct"] = round(x["bad"] / peak * 100)
+        return series
+
+    @classmethod
+    def get_workflow_summary(cls, workspace=None) -> dict:
+        """Counts of workflow runs that need attention."""
+        from core.models import WorkflowRun
+
+        runs = WorkflowRun.objects
+        if workspace is not None:
+            runs = runs.for_workspace(workspace)
+        waiting = list(runs.filter(status=WorkflowRun.Status.WAITING_APPROVAL).select_related("workflow")[:5])
+        failed_today = runs.filter(status=WorkflowRun.Status.FAILED, created_at__date=timezone.localdate()).count()
+        running = runs.filter(status=WorkflowRun.Status.RUNNING).count()
+        return {"waiting": waiting, "failed_today": failed_today, "running": running}
+

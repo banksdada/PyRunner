@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}{% if workflow %}Edit{% else %}New{% endif %} workflow - PyRunner{% endblock %}
+{% block content %}
+<div class="flex">
+    {% include "cpanel/_sidebar.html" %}
+    <div class="flex-1 min-w-0">
+        <div class="px-5 lg:px-8 py-7 max-w-4xl mx-auto space-y-5">
+            <div>
+                <nav class="flex items-center gap-1.5 eyebrow text-faint mb-3">
+                    <a href="{% url 'cpanel:workflow_list' %}" class="hover:text-text transition-colors">Workflows</a><span>/</span>
+                    <span class="text-muted">{% if workflow %}Edit{% else %}Create{% endif %}</span>
+                </nav>
+                <h1 class="text-[22px] font-semibold tracking-tight">{% if workflow %}Edit{% else %}New{% endif %} workflow</h1>
+            </div>
+            <form method="post" class="space-y-5">
+                {% csrf_token %}
+                <section class="rounded-2xl border border-line bg-panel p-6 space-y-4">
+                    {% for f in form %}
+                    <div>
+                        {% if f.name == 'is_enabled' %}
+                        <label class="flex items-center gap-2.5 cursor-pointer">{{ f }}<span class="text-[13px] font-medium text-text">Enabled</span></label>
+                        {% else %}
+                        <label for="{{ f.id_for_label }}" class="block text-[13px] font-medium text-text mb-1.5">{{ f.label }}</label>
+                        {{ f }}
+                        {% if f.help_text %}<p class="mt-1.5 text-xs text-faint">{{ f.help_text }}</p>{% endif %}
+                        {% endif %}
+                        {% for e in f.errors %}<p class="mt-1.5 text-xs text-fail">{{ e }}</p>{% endfor %}
+                    </div>
+                    {% endfor %}
+                </section>
+
+                <section class="rounded-2xl border border-line bg-panel p-6 space-y-4">
+                    <div>
+                        <h2 class="text-sm font-semibold">Steps</h2>
+                        <p class="text-xs text-faint mt-1">Steps run in "Order" sequence. Each script step gets the previous step's output in the <span class="font-mono">WORKFLOW_INPUT</span> environment variable. If the last line a script prints is JSON, that line is its output. Leave blank rows empty. Tick "Delete" to remove a step. To use "Jump to another step" on a new step, save first, then edit.</p>
+                    </div>
+                    {{ formset.management_form }}
+                    {% for e in formset.non_form_errors %}<p class="text-xs text-fail">{{ e }}</p>{% endfor %}
+                    {% for sf in formset %}
+                    <div class="rounded-xl border border-line-soft bg-ink/40 p-4 grid grid-cols-1 md:grid-cols-6 gap-3">
+                        {% for h in sf.hidden_fields %}{{ h }}{% endfor %}
+                        <div class="md:col-span-1"><label class="block text-xs text-muted mb-1">Order</label>{{ sf.order }}</div>
+                        <div class="md:col-span-3"><label class="block text-xs text-muted mb-1">Name</label>{{ sf.name }}</div>
+                        <div class="md:col-span-2"><label class="block text-xs text-muted mb-1">Type</label>{{ sf.step_type }}</div>
+                        <div class="md:col-span-3"><label class="block text-xs text-muted mb-1">Script</label>{{ sf.script }}</div>
+                        <div class="md:col-span-2"><label class="block text-xs text-muted mb-1">If it fails</label>{{ sf.on_failure }}</div>
+                        <div class="md:col-span-1"><label class="block text-xs text-muted mb-1">Jump to</label>{{ sf.failure_goto }}</div>
+                        <div class="md:col-span-6"><label class="block text-xs text-muted mb-1">Approval message (approval steps)</label>{{ sf.approval_message }}</div>
+                        {% if sf.instance.pk %}<label class="md:col-span-6 flex items-center gap-2 text-xs text-fail">{{ sf.DELETE }} Delete this step</label>{% endif %}
+                        {% for field in sf %}{% for e in field.errors %}<p class="md:col-span-6 text-xs text-fail">{{ field.label }}: {{ e }}</p>{% endfor %}{% endfor %}
+                    </div>
+                    {% endfor %}
+                </section>
+
+                <div class="flex items-center justify-end gap-2.5">
+                    <a href="{% url 'cpanel:workflow_list' %}" class="text-[13px] px-3.5 py-2 rounded-lg border border-line text-muted hover:text-text hover:border-faint transition-colors">Cancel</a>
+                    <button type="submit" class="text-[13px] font-medium px-3.5 py-2 rounded-lg bg-ok text-ink hover:opacity-90 transition">Save workflow</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

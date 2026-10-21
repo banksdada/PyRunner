@@ -154,6 +154,15 @@ def _build_script_environment(
         if "body_json" in webhook_data:
             env["WEBHOOK_BODY_JSON"] = json.dumps(webhook_data["body_json"])
 
+    # Retry + workflow context (empty / absent for a plain first-try run).
+    if run is not None:
+        env["PYRUNNER_ATTEMPT"] = str(run.attempt)
+        env["PYRUNNER_IDEMPOTENCY_KEY"] = run.idempotency_key or run.id.hex
+        if run.workflow_step_run_id:
+            from core.services.workflow_service import WorkflowService
+
+            env.update(WorkflowService.build_env(run))
+
     # Add Claude AI support (Services -> Claude AI). Injects the configured
     # credential + config dir so the pyrunner_ai helper works in scripts.
     # Empty dict when Claude is disabled/unconfigured.

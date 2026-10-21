@@ -106,6 +106,30 @@ class Script(models.Model):
         help_text="Maximum execution time in seconds (default: 1 hour, max: 24 hours)",
     )
 
+    # Automatic retries. 0 = never retry (the original behaviour).
+    class RetryBackoff(models.TextChoices):
+        FIXED = "fixed", "Fixed delay"
+        EXPONENTIAL = "exponential", "Exponential (delay doubles each retry)"
+
+    # A script can exit with this code to say "failed, but retrying is pointless"
+    # (bad password, invalid input). Same value as sysexits EX_CONFIG.
+    NO_RETRY_EXIT_CODE = 78
+
+    max_retries = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="How many times to retry after a failure (0 = never retry, max 10)",
+    )
+    retry_delay_seconds = models.PositiveIntegerField(
+        default=60,
+        help_text="Wait before the first retry, in seconds",
+    )
+    retry_backoff = models.CharField(
+        max_length=20,
+        choices=RetryBackoff.choices,
+        default=RetryBackoff.EXPONENTIAL,
+        help_text="Fixed: same wait every time. Exponential: wait doubles each retry.",
+    )
+
     # Status
     is_enabled = models.BooleanField(
         default=True,
