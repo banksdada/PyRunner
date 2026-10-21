@@ -398,6 +398,15 @@
                                     <p class="mt-1.5 text-xs text-faint">{{ worker_form.q_queue_limit.help_text }}</p>
                                     {% if worker_form.q_queue_limit.errors %}<p class="mt-1.5 text-xs text-fail">{{ worker_form.q_queue_limit.errors.0 }}</p>{% endif %}
                                 </div>
+                                <div class="md:col-span-2 pt-4 border-t border-line-soft space-y-4">
+                                    <label class="flex items-start gap-2.5 cursor-pointer">{{ worker_form.resource_guard_enabled }}<span><span class="block text-[13px] font-medium text-text">{{ worker_form.resource_guard_enabled.label }}</span><span class="block text-xs text-faint">{{ worker_form.resource_guard_enabled.help_text }}</span></span></label>
+                                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                                        <div><label class="block text-[13px] font-medium text-text mb-1.5">{{ worker_form.guard_min_free_memory_pct.label }}</label>{{ worker_form.guard_min_free_memory_pct }}</div>
+                                        <div><label class="block text-[13px] font-medium text-text mb-1.5">{{ worker_form.guard_max_cpu_pct.label }}</label>{{ worker_form.guard_max_cpu_pct }}</div>
+                                        <div><label class="block text-[13px] font-medium text-text mb-1.5">{{ worker_form.max_heavy_runs.label }}</label>{{ worker_form.max_heavy_runs }}</div>
+                                    </div>
+                                    <p class="text-xs text-faint">{{ worker_form.max_heavy_runs.help_text }}</p>
+                                </div>
                             </div>
                         </div>
                         <div class="mt-5 flex items-center gap-4">

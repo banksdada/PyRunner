@@ -252,6 +252,11 @@
         </div>
     </section>
 
+    <!-- Resource use -->
+    <section class="rounded-2xl border border-line bg-panel p-5">
+        <label class="flex items-start gap-2.5 cursor-pointer">{{ form.is_heavy }}<span><span class="block text-[13px] font-medium text-text">{{ form.is_heavy.label }}</span><span class="block text-xs text-faint">{{ form.is_heavy.help_text }}</span></span></label>
+    </section>
+
     <!-- Notifications (collapsible) -->
     <section class="rounded-2xl border border-line bg-panel overflow-hidden">
         <button type="button" onclick="toggleSection('notifications')" class="w-full px-5 py-4 flex items-center justify-between text-left hover:bg-panel-hi/50 transition-colors">

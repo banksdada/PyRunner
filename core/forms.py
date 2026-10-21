@@ -93,6 +93,7 @@ class ScriptForm(forms.ModelForm):
             "max_retries",
             "retry_delay_seconds",
             "retry_backoff",
+            "is_heavy",
             "notify_on",
             "notify_email",
             "notify_webhook_url",
@@ -127,6 +128,7 @@ class ScriptForm(forms.ModelForm):
             "max_retries": forms.NumberInput(attrs={"class": INPUT_CLASS, "min": 0, "max": 10}),
             "retry_delay_seconds": forms.NumberInput(attrs={"class": INPUT_CLASS, "min": 1, "max": 86400}),
             "retry_backoff": forms.Select(attrs={"class": INPUT_CLASS}),
+            "is_heavy": forms.CheckboxInput(attrs={"class": CHECK_CLASS}),
             "notify_on": forms.Select(attrs={"class": INPUT_CLASS}),
             "notify_email": forms.EmailInput(
                 attrs={
@@ -155,6 +157,7 @@ class ScriptForm(forms.ModelForm):
             "max_retries": "Automatic retries",
             "retry_delay_seconds": "Wait before first retry (seconds)",
             "retry_backoff": "Retry wait pattern",
+            "is_heavy": "Heavy script",
             "notify_on": "Notify On",
             "notify_email": "Notification Email",
             "notify_webhook_url": "Webhook URL",
@@ -932,10 +935,35 @@ class NotificationSettingsForm(forms.Form):
         help_text="All script notifications will be sent here unless overridden per-script.",
     )
 
+    resource_guard_enabled = forms.BooleanField(
+        required=False,
+        label="Resource guard",
+        help_text="Hold new runs back while the server is short of memory or busy. Takes effect immediately.",
+        widget=forms.CheckboxInput(attrs={"class": CHECK_CLASS}),
+    )
+    guard_min_free_memory_pct = forms.IntegerField(
+        min_value=5, max_value=90, initial=20, required=False,
+        label="Keep this % of memory free",
+        widget=forms.NumberInput(attrs={"class": INPUT_CLASS, "min": 5, "max": 90}),
+    )
+    guard_max_cpu_pct = forms.IntegerField(
+        min_value=20, max_value=100, initial=85, required=False,
+        label="Pause new runs above this CPU %",
+        widget=forms.NumberInput(attrs={"class": INPUT_CLASS, "min": 20, "max": 100}),
+    )
+    max_heavy_runs = forms.IntegerField(
+        min_value=1, max_value=16, initial=1, required=False,
+        label="Heavy scripts at once",
+        help_text="Scripts ticked 'Heavy script' never exceed this many at the same time.",
+        widget=forms.NumberInput(attrs={"class": INPUT_CLASS, "min": 1, "max": 16}),
+    )
+
     def __init__(self, *args, instance=None, **kwargs):
         """Initialize form with existing settings."""
         super().__init__(*args, **kwargs)
         if instance:
+            for name in ("resource_guard_enabled", "guard_min_free_memory_pct", "guard_max_cpu_pct", "max_heavy_runs"):
+                self.fields[name].initial = getattr(instance, name)
             self.fields["email_backend"].initial = instance.email_backend
             self.fields["smtp_host"].initial = instance.smtp_host
             self.fields["smtp_port"].initial = instance.smtp_port
@@ -1290,8 +1318,17 @@ class WorkerSettingsForm(forms.Form):
         if changed:
             instance.worker_settings_updated_at = timezone.now()
 
+        # Resource guard settings take effect immediately (no restart).
+        instance.resource_guard_enabled = self.cleaned_data.get("resource_guard_enabled", False)
+        for name, default in (("guard_min_free_memory_pct", 20), ("guard_max_cpu_pct", 85), ("max_heavy_runs", 1)):
+            setattr(instance, name, self.cleaned_data.get(name) or default)
+
         instance.save(
             update_fields=[
+                "resource_guard_enabled",
+                "guard_min_free_memory_pct",
+                "guard_max_cpu_pct",
+                "max_heavy_runs",
                 "q_workers",
                 "q_timeout",
                 "q_retry",

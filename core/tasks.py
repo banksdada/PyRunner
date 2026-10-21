@@ -16,7 +16,9 @@ from core.models import Run, Script, ScriptSchedule, GlobalSettings, PackageOper
 logger = logging.getLogger(__name__)
 
 
-def execute_run_task(run_id: str, webhook_data: dict | None = None) -> dict:
+def execute_run_task(
+    run_id: str, webhook_data: dict | None = None, defer_count: int = 0
+) -> dict:
     """
     Execute a script run asynchronously.
 
@@ -51,6 +53,30 @@ def execute_run_task(run_id: str, webhook_data: dict | None = None) -> dict:
             "run_id": run_id,
             "error": f"Invalid UUID format: {e}",
         }
+
+    # Resource guard: if the server is too busy, hold this run back and look again
+    # in 30s (the run stays PENDING, so it still shows as "Queued").
+    if run.status == Run.Status.PENDING:
+        from datetime import timedelta
+
+        from django_q.models import Schedule as QSchedule
+        from django_q.tasks import schedule as q_schedule
+
+        from core.services.resource_guard import RECHECK_SECONDS, ResourceGuard
+
+        decision = ResourceGuard.check(run, defer_count)
+        if not decision.allowed:
+            q_schedule(
+                "core.tasks.execute_run_task",
+                run_id,
+                webhook_data,
+                defer_count + 1,
+                name=f"defer-{run_id}-{defer_count + 1}",
+                schedule_type=QSchedule.ONCE,
+                next_run=timezone.now() + timedelta(seconds=RECHECK_SECONDS),
+            )
+            logger.info(f"Run {run_id} held back: {decision.reason}")
+            return {"success": False, "run_id": run_id, "deferred": decision.reason}
 
     execute_run(run, webhook_data=webhook_data)
     run.refresh_from_db()

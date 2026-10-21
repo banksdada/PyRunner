@@ -178,6 +178,24 @@ class GlobalSettings(models.Model):
         default=20,
         help_text="Maximum number of tasks in the queue",
     )
+    # Resource guard: lets you run many workers without overloading the server.
+    # A run waits (and is re-checked every 30s) while the machine is too busy.
+    resource_guard_enabled = models.BooleanField(
+        default=True,
+        help_text="Hold new runs back while the server is short of memory or CPU",
+    )
+    guard_min_free_memory_pct = models.PositiveSmallIntegerField(
+        default=20,
+        help_text="Don't start a run if less than this % of server memory is free",
+    )
+    guard_max_cpu_pct = models.PositiveSmallIntegerField(
+        default=85,
+        help_text="Don't start a run if server CPU use is above this %",
+    )
+    max_heavy_runs = models.PositiveSmallIntegerField(
+        default=1,
+        help_text="How many scripts marked 'heavy' may run at the same time",
+    )
     worker_settings_updated_at = models.DateTimeField(
         null=True,
         blank=True,

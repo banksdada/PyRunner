@@ -296,3 +296,67 @@ class DashboardAndViewTests(Base):
         data["name"] = "Bad"
         data["schedule_cron"] = "nonsense"
         self.assertEqual(self.client.post(reverse("cpanel:workflow_create"), data).status_code, 200)
+
+
+class ResourceGuardTests(Base):
+    def _running(self, heavy=False):
+        s = Script.objects.create(name=f"r{Script.objects.count()}", code="x", environment=self.env, is_heavy=heavy)
+        return Run.objects.create(script=s, status=Run.Status.RUNNING)
+
+    def check(self, run, defer=0, mem_free=50, cpu=10):
+        from core.services.resource_guard import ResourceGuard
+        vm = mock.Mock(available=mem_free, total=100)
+        with mock.patch("psutil.virtual_memory", return_value=vm), \
+             mock.patch("psutil.cpu_percent", return_value=cpu):
+            return ResourceGuard.check(run, defer)
+
+    def test_only_run_always_starts(self):
+        run = self.new_run()
+        self.assertTrue(self.check(run, mem_free=1, cpu=99).allowed)
+
+    def test_low_memory_holds_back(self):
+        self._running()
+        self.assertFalse(self.check(self.new_run(), mem_free=10).allowed)
+
+    def test_high_cpu_holds_back(self):
+        self._running()
+        self.assertFalse(self.check(self.new_run(), cpu=95).allowed)
+
+    def test_healthy_server_allows(self):
+        self._running()
+        self.assertTrue(self.check(self.new_run()).allowed)
+
+    def test_heavy_cap(self):
+        self._running(heavy=True)
+        self.script.is_heavy = True
+        self.script.save()
+        self.assertFalse(self.check(self.new_run()).allowed)
+        # a light script is not limited by the heavy cap
+        light = Script.objects.create(name="light", code="x", environment=self.env)
+        self.assertTrue(self.check(Run.objects.create(script=light)).allowed)
+
+    def test_gives_up_waiting(self):
+        self._running()
+        self.assertTrue(self.check(self.new_run(), defer=60, mem_free=1).allowed)
+
+    def test_disabled_guard(self):
+        from core.models import GlobalSettings
+        gs = GlobalSettings.get_settings()
+        gs.resource_guard_enabled = False
+        gs.save()
+        self._running()
+        self.assertTrue(self.check(self.new_run(), mem_free=1).allowed)
+
+    def test_task_defers_instead_of_running(self):
+        self._running()
+        run = self.new_run()
+        vm = mock.Mock(available=5, total=100)
+        with mock.patch("psutil.virtual_memory", return_value=vm), \
+             mock.patch("psutil.cpu_percent", return_value=5), \
+             mock.patch("core.executor.execute_run") as ex:
+            result = tasks.execute_run_task(str(run.id))
+        ex.assert_not_called()
+        self.assertIn("deferred", result)
+        run.refresh_from_db()
+        self.assertEqual(run.status, Run.Status.PENDING)
+        self.assertTrue(QSchedule.objects.filter(name=f"defer-{run.id}-1").exists())

@@ -130,6 +130,12 @@ class Script(models.Model):
         help_text="Fixed: same wait every time. Exponential: wait doubles each retry.",
     )
 
+    is_heavy = models.BooleanField(
+        default=False,
+        help_text="Uses a lot of CPU or memory. Only a limited number of heavy "
+        "scripts run at the same time (Settings > Workers).",
+    )
+
     # Status
     is_enabled = models.BooleanField(
         default=True,
